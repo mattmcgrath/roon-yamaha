@@ -1,0 +1,12 @@
+[Unit]
+Description=YamahaControl
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/node /root/roon-yamaha-control-yxc > /dev/null
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
