@@ -115,6 +115,9 @@ function check_status() {
                 volume_value: result.volume - 80,
                 is_muted: result.mute
             });
+            yamaha.source_control.update_state({
+                status: (result.power == "on")? "selected": "standby"
+            });
             update_status()
         })
         .catch( (error) => {
@@ -214,13 +217,14 @@ function setup_yamaha() {
             status: "selected",
         },
         convenience_switch: function (req) {
+            yamaha.hid.power("on");
             yamaha.hid.setInput(mysettings.input);
             req.send_complete("Success");
         },
         standby: function (req) {
             let state = this.state.status;
-            this.state.status = (state == "selected")? "standby": "selected";
-            yamaha.hid.power(state == "selected");
+            this.state.status = (state == "selected")? "standby" : "selected";
+            yamaha.hid.power((state == "selected")? "standby": "on");
             req.send_complete("Success");
         }
     });

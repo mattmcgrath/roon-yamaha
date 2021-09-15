@@ -1,7 +1,7 @@
 {
     "name": "roon-yamaha-control-yxc",
     "version": "0.0.1",
-    "description": "Roon Extension to control Yamaha Receivers using XYC",
+    "description": "Roon Extension to control Yamaha Receivers using YXC",
     "main": "app.js",
     "author": "Matthew R. McGrath",
     "license": "Apache-2.0",
@@ -12,6 +12,6 @@
         "node-roon-api-status": "github:roonlabs/node-roon-api-status",
         "node-roon-api-volume-control": "github:roonlabs/node-roon-api-volume-control",
         "yamaha-nodejs": "^0.9.6",
-        "yamaha-xyc-nodejs": "github:foxthefox/yamaha-yxc-nodejs"
+        "yamaha-yxc-nodejs": "github:foxthefox/yamaha-yxc-nodejs"
     }
 }
