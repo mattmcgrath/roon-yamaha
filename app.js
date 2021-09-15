@@ -1,45 +1,38 @@
 var RoonApi = require("node-roon-api"),
-    RoonApiStatus    = require("node-roon-api-status"),
+    RoonApiStatus = require("node-roon-api-status");
     RoonApiSettings  = require("node-roon-api-settings"),
     RoonApiSourceControl = require("node-roon-api-source-control"),
     RoonApiVolumeControl = require("node-roon-api-volume-control"),
-    Yamaha = require("node-yamaha-avr");
+    YamahaYXC = require("yamaha-yxc-nodejs");
 
 var roon = new RoonApi({
-    extension_id:        'com.statesofpop.roon-yamaha',
-    display_name:        "Yamaha Control",
-    display_version:     "0.0.7",
-    publisher:           'states of pop',
-    email:               'hi@statesofpop.de',
-    website:             'https://github.com/statesofpop/roon-yamaha'
+    extension_id:        'com.mattmcgrath.roonyamahacontrolyxc',
+    display_name:        "Roon Yamaha Control YXC",
+    display_version:     "0.0.1",
+    publisher:           'Matthew R. McGrath',
+    email:               'matthew (no space) mcg (at) (hotmail)',
+    website:             'https://github.com/mattmcgrath/roon-yamaha-control-yxc'
 });
-
-var yamaha = {
-    "default_device_name": "Yamaha",
-    "default_input": "HDMI1",
-    "volume": -50
-};
 
 var svc_status = new RoonApiStatus(roon);
 var svc_volume = new RoonApiVolumeControl(roon);
 var svc_source = new RoonApiSourceControl(roon);
 var svc_settings = new RoonApiSettings(roon);
 
+var yamaha = {
+    "default_device_name": "Yamaha",
+    "default_input": "coaxial",
+    "volume": -70
+};
+
 var volTimeout = null;
 
 var mysettings = roon.load_config("settings") || {
     receiver_url: "",
-    input:        yamaha.default_input,
-    device_name:  yamaha.default_device_name,
-    input_list:   [
-        { title: "HDMI 1", value: "HDMI1" },
-        { title: "HDMI 2", value: "HDMI2" },
-        { title: "HDMI 3", value: "HDMI3" },
-        { title: "HDMI 4", value: "HDMI4" },
-        { title: "HDMI 5", value: "HDMI5" },
-        { title: "HDMI 6", value: "HDMI6" }
-    ]
-};
+    input: yamaha.default_input,
+    device_name: yamaha.default_device_name,
+    input_list: ["coaxial"]
+}
 
 function makelayout(settings) {
     var l = {
@@ -94,9 +87,7 @@ var svc_settings = new RoonApiSettings(roon, {
     }
 });
 
-
-
-svc_status.set_status("Initialising", false);
+svc_status.set_status("Initializing.", false)
 
 function update_status() {
     if (yamaha.hid && yamaha.device_name) {
@@ -106,29 +97,30 @@ function update_status() {
     } else if (yamaha.hid) {
         svc_status.set_status("Found Yamaha device. Discovering…", false);    
     } else {
-        svc_status.set_status("Could not find Yamaha device.", true)
+        svc_status.set_status("Could not find Yamaha device while updating status.", true)
     }
 }
 
 function check_status() {
     if (yamaha.hid) {
         yamaha.hid.getStatus()
-        .then( (result) => {
+        .then( (json_result) => {
             // exit if a change through roon is in progress
             if (volTimeout) return;
             // this seems to only get called on success
-            let vol_status = result["YAMAHA_AV"]["Main_Zone"][0]["Basic_Status"][0]["Volume"][0];
             // should get current state first, to see if update is necessary
+            
+            result = JSON.parse(json_result);
             yamaha.svc_volume.update_state({
-                volume_value: vol_status["Lvl"][0]["Val"] / 10,
-                is_muted: (vol_status["Mute"] == "On")
+                volume_value: result.volume - 80,
+                is_muted: result.mute
             });
             update_status()
         })
         .catch( (error) => {
             // this seems not to get called when device is offline
             yamaha.hid == "";
-            svc_status.set_status("Could not find Yamaha device.", true);
+            svc_status.set_status("Could not find Yamaha device while checking status.", true);
         });
     }
 }
@@ -146,7 +138,7 @@ function setup_yamaha() {
         delete(yamaha.svc_volume);
     }
 
-    yamaha.hid = new Yamaha(mysettings.receiver_url);
+    yamaha.hid = new YamahaYXC(mysettings.receiver_url);
     // should check whether the device is behind the given url
     // only then start to discover.
     yamaha.hid.discover()
@@ -156,20 +148,23 @@ function setup_yamaha() {
     })
     .catch( (error) => {
         yamaha.hid = undefined;
-        svc_status.set_status("Could not find Yamaha device.", true)
+        svc_status.set_status("Could not find Yamaha device for setup.", true)
     });
     
     try {
-        yamaha.hid.getSystemConfig().then(function(config) {
+        yamaha.hid.getDeviceInfo().then(function(config) {
             if (mysettings.device_name == yamaha.default_device_name) {
-                mysettings.device_name = config["YAMAHA_AV"]["System"][0]["Config"][0]["Model_Name"][0];
+                mysettings.device_name = "Yamaha " + config["model_name"];
             }
-            let inputs = config["YAMAHA_AV"]["System"][0]["Config"][0]["Name"][0]["Input"][0];
+            update_status();
+        })
+        yamaha.hid.getFeatures().then(function(result) {
+            let inputs = JSON.parse(result).system.input_list;
             mysettings.input_list = [];
             for (let key in inputs) {
                 mysettings.input_list.push({
-                    "title": inputs[key][0].trim(),
-                    "value": key.replace("_", "")
+                    "title": inputs[key].id,
+                    "value": inputs[key].id
                 })
             }
             update_status();
@@ -182,10 +177,10 @@ function setup_yamaha() {
         state: {
             display_name: mysettings.device_name,
             volume_type:  "db",
-            volume_min:   -87.5,
-            volume_max:   -20,
-            volume_value: -50,
-            volume_step:  0.5,
+            volume_min:   -80,
+            volume_max:   0,
+            volume_value: -80,
+            volume_step:  1,
             is_muted:     0
         },
         set_volume: function (req, mode, value) {
@@ -193,10 +188,11 @@ function setup_yamaha() {
             if      (newvol < this.state.volume_min) newvol = this.state.volume_min;
             else if (newvol > this.state.volume_max) newvol = this.state.volume_max;
             yamaha.svc_volume.update_state({ volume_value: newvol });
+            
             clearTimeout(volTimeout);
             volTimeout = setTimeout(() => {
                 // node-yamaha-avr sends full ints
-                yamaha.hid.setVolume( value * 10 );
+                yamaha.hid.setVolumeTo(value + 80);
                 clearTimeout(volTimeout);
                 volTimeout = null;
             }, 500)
@@ -204,7 +200,7 @@ function setup_yamaha() {
         },
         set_mute: function (req, action) {
             let is_muted = !this.state.is_muted;
-            yamaha.hid.setMute( (is_muted)? "on": "off" )
+            yamaha.hid.mute(is_muted)
             yamaha.svc_volume.update_state({ is_muted: is_muted });
             req.send_complete("Success");
         }
@@ -224,7 +220,7 @@ function setup_yamaha() {
         standby: function (req) {
             let state = this.state.status;
             this.state.status = (state == "selected")? "standby": "selected";
-            yamaha.hid.setPower((state == "selected")? "off": "on");
+            yamaha.hid.power(state == "selected");
             req.send_complete("Success");
         }
     });
@@ -238,4 +234,3 @@ setInterval(() => { if (!yamaha.hid) setup_yamaha(); }, 1000);
 setInterval(() => { if (yamaha.hid) check_status(); }, 5000);
 
 roon.start_discovery();
-
