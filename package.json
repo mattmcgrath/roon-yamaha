@@ -6,6 +6,7 @@
     "author": "Matthew R. McGrath",
     "license": "Apache-2.0",
     "dependencies": {
+        "net-ping": "^1.2.3",
         "node-roon-api": "github:roonlabs/node-roon-api",
         "node-roon-api-settings": "github:roonlabs/node-roon-api-settings",
         "node-roon-api-source-control": "github:roonlabs/node-roon-api-source-control",

@@ -3,7 +3,8 @@ var RoonApi = require("node-roon-api"),
     RoonApiSettings  = require("node-roon-api-settings"),
     RoonApiSourceControl = require("node-roon-api-source-control"),
     RoonApiVolumeControl = require("node-roon-api-volume-control"),
-    YamahaYXC = require("yamaha-yxc-nodejs");
+    YamahaYXC = require("yamaha-yxc-nodejs"),
+    ping = require ("net-ping");
 
 var roon = new RoonApi({
     extension_id:        'com.mattmcgrath.roonyamahacontrolyxc',
@@ -22,16 +23,30 @@ var svc_settings = new RoonApiSettings(roon);
 var yamaha = {
     "default_device_name": "Yamaha",
     "default_input": "coaxial",
-    "volume": -70
+    "volume": -70,
+    "tv_status": "off"
 };
+
+var ping_options = {
+    networkProtocol: ping.NetworkProtocol.IPv4,
+    packetSize: 16,
+    retries: 1,
+    sessionId: (process.pid % 65535),
+    timeout: 100,
+    ttl: 128
+};
+
+var session = ping.createSession (ping_options);
 
 var volTimeout = null;
 
 var mysettings = roon.load_config("settings") || {
-    receiver_url: "",
+    receiver_url: "192.168.0.104",
     input: yamaha.default_input,
     device_name: yamaha.default_device_name,
-    input_list: ["coaxial"]
+    input_list: ["coaxial"],
+    tv_ip: "",
+    tv_input: "optical"
 }
 
 function makelayout(settings) {
@@ -67,6 +82,26 @@ function makelayout(settings) {
         l.has_error = true; 
     }
     l.layout.push(v);
+
+    let t = {
+        type:    "string",
+        title:   "TV IP",
+        subtitle: "Please configure your TV to use a fixed IP-address.",
+        setting: "tv_ip"
+    };
+
+    if (settings.tv_ip != "" && settings.tv_ip.match(/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/) === null) {
+        v.error = "Please enter a valid IP-address";
+        l.has_error = true; 
+    }
+    l.layout.push(t);
+
+    l.layout.push({
+        type:    "dropdown",
+        title:   "TV Input",
+        values:   mysettings.input_list,
+        setting: "tv_input"
+    });
 
     return l;
 }
@@ -118,6 +153,19 @@ function check_status() {
             yamaha.source_control.update_state({
                 status: (result.power == "on")? "selected": "standby"
             });
+            // Add the polling of TV status here, if there's a TV IP defined
+            if (mysettings.tv_ip) {
+                session.pingHost (mysettings.tv_ip, function (error, target) {
+                    if (error) {
+                        yamaha.tv_status = "off";
+                    } else {
+                        yamaha.tv_status = "on";
+                        yamaha.hid.power("on");
+                        yamaha.hid.setInput(mysettings.tv_input);
+                    }
+                });
+            }
+
             update_status()
         })
         .catch( (error) => {
