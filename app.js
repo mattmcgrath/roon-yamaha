@@ -4,7 +4,7 @@ var RoonApi = require("node-roon-api"),
     RoonApiSourceControl = require("node-roon-api-source-control"),
     RoonApiVolumeControl = require("node-roon-api-volume-control"),
     YamahaYXC = require("yamaha-yxc-nodejs"),
-    ping = require ("net-ping");
+    tcpp = require('tcp-ping');
 
 var roon = new RoonApi({
     extension_id:        'com.mattmcgrath.roonyamahacontrolyxc',
@@ -27,17 +27,6 @@ var yamaha = {
     "tv_status": "off"
 };
 
-var ping_options = {
-    networkProtocol: ping.NetworkProtocol.IPv4,
-    packetSize: 16,
-    retries: 1,
-    sessionId: (process.pid % 65535),
-    timeout: 100,
-    ttl: 128
-};
-
-var session = ping.createSession (ping_options);
-
 var volTimeout = null;
 
 var mysettings = roon.load_config("settings") || {
@@ -46,6 +35,7 @@ var mysettings = roon.load_config("settings") || {
     device_name: yamaha.default_device_name,
     input_list: ["coaxial"],
     tv_ip: "",
+    tv_port: "51312",
     tv_input: "optical"
 }
 
@@ -97,11 +87,19 @@ function makelayout(settings) {
     l.layout.push(t);
 
     l.layout.push({
+        type:    "string",
+        title:   "TV Port",
+        subtitle: "Determine through portscan",
+        setting: "tv_port"
+    });
+
+    l.layout.push({
         type:    "dropdown",
         title:   "TV Input",
         values:   mysettings.input_list,
         setting: "tv_input"
     });
+
 
     return l;
 }
@@ -155,16 +153,16 @@ function check_status() {
             });
             // Add the polling of TV status here, if there's a TV IP defined
             if (mysettings.tv_ip) {
-                session.pingHost (mysettings.tv_ip, function (error, target) {
-                    if (error) {
-                        yamaha.tv_status = "off";
-                    } else {
-                        yamaha.tv_status = "on";
-                        yamaha.hid.power("on");
-                        yamaha.hid.setInput(mysettings.tv_input);
-                    }
-                });
-            }
+                tcpp.probe(mysettings.tv_ip, mysettings.tv_port, function(err, available) {
+                if (available){
+                    yamaha.hid.power("on");
+                    yamaha.hid.setInput(mysettings.tv_input);
+                    //console.log("Yamaha Status is " + yamaha.source_control.state);
+                } else {
+                    yamaha.hid.power("standby");
+                }
+            });
+        }
 
             update_status()
         })
