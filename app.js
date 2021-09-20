@@ -33,8 +33,8 @@ var mysettings = roon.load_config("settings") || {
     receiver_url: "192.168.0.104",
     input: yamaha.default_input,
     device_name: yamaha.default_device_name,
-    input_list: ["coaxial"],
-    tv_ip: "",
+    input_list: [{"title":"coaxial", "value":"coaxial"}],
+    tv_ip: "192.168.0.106",
     tv_port: "51312",
     tv_input: "optical"
 }
@@ -81,7 +81,7 @@ function makelayout(settings) {
     };
 
     if (settings.tv_ip != "" && settings.tv_ip.match(/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/) === null) {
-        v.error = "Please enter a valid IP-address";
+        t.error = "Please enter a valid IP-address";
         l.has_error = true; 
     }
     l.layout.push(t);
@@ -134,6 +134,8 @@ function update_status() {
     }
 }
 
+var tv_power_control = false;
+
 function check_status() {
     if (yamaha.hid) {
         yamaha.hid.getStatus()
@@ -155,12 +157,16 @@ function check_status() {
             if (mysettings.tv_ip) {
                 tcpp.probe(mysettings.tv_ip, mysettings.tv_port, function(err, available) {
                 if (available){
+			tv_power_control = true;
                     yamaha.hid.power("on");
                     yamaha.hid.setInput(mysettings.tv_input);
                     //console.log("Yamaha Status is " + yamaha.source_control.state);
                 } else {
-                    yamaha.hid.power("standby");
-                }
+                    if (tv_power_control) {
+			    tv_power_control = false;
+			    yamaha.hid.power("standby");
+		    }
+		}
             });
         }
 
