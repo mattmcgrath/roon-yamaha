@@ -135,6 +135,7 @@ function update_status() {
 }
 
 var tv_power_control = false;
+var tv_power_strikes = 0;
 
 function check_status() {
     if (yamaha.hid) {
@@ -157,14 +158,20 @@ function check_status() {
             if (mysettings.tv_ip) {
                 tcpp.probe(mysettings.tv_ip, mysettings.tv_port, function(err, available) {
                 if (available){
-			tv_power_control = true;
+                    tv_power_control = true; // Set flag to indicate we are controlling TV power
+                    tv_power_strikes = 3; // Set number of "strikes" (failed TV power polls) before turning the receiver off
                     yamaha.hid.power("on");
                     yamaha.hid.setInput(mysettings.tv_input);
                     //console.log("Yamaha Status is " + yamaha.source_control.state);
                 } else {
                     if (tv_power_control) {
-			    tv_power_control = false;
-			    yamaha.hid.power("standby");
+			             tv_power_strikes = tv_power_strikes - 1; // Decrement number of remaining strikes after failed TV power polling
+                         if (tv_power_strikes < 1) {
+                            tv_power_control = false; // Relase power control
+                            yamaha.hid.power("standby");
+                         }
+                    }
+                }
 		    }
 		}
             });
